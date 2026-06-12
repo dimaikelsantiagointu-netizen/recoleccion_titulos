@@ -187,8 +187,3 @@ sudo systemctl restart nginx
 
 ```
 
-El sistema estará ahora en línea y listo para su uso institucional.
-
-```
-
-```

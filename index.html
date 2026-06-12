@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro Institucional de Títulos de Tierras Urbanas</title>
+    <style>
+        :root {
+            --primary-blue: #003876;
+            --secondary-blue: #0056b3;
+            --accent-yellow: #FFC107;
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --text-dark: #333333;
+            --border-radius: 12px;
+        }
+
+        body { 
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            background-color: var(--bg-color); 
+            color: var(--text-dark);
+            padding: 20px; 
+            margin: 0;
+        }
+
+        .header-title {
+            text-align: center;
+            color: var(--primary-blue);
+            margin-bottom: 30px;
+        }
+
+        .nav-container {
+            max-width: 1000px;
+            margin: 0 auto 20px auto;
+            text-align: left;
+        }
+
+        .btn-volver {
+            background: #cbd5e1;
+            color: var(--primary-blue);
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        /* Diseño Tipo Bento Box */
+        .bento-container { 
+            max-width: 1000px; 
+            margin: auto; 
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .bento-card {
+            background: var(--card-bg); 
+            padding: 25px; 
+            border-radius: var(--border-radius); 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Acento Tricolor Institucional en la tarjeta principal */
+        .card-tricolor::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 6px;
+            background: linear-gradient(to right, #FCE300 33.3%, #0038A8 33.3%, #0038A8 66.6%, #CE1126 66.6%);
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        h3 {
+            margin-top: 0;
+            color: var(--primary-blue);
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .form-group { margin-bottom: 15px; }
+        
+        label { 
+            display: block; 
+            font-weight: 600; 
+            margin-bottom: 6px; 
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        input, select { 
+            width: 100%; 
+            padding: 10px; 
+            border: 1px solid #cbd5e1; 
+            border-radius: 6px; 
+            box-sizing: border-box;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px rgba(0, 56, 118, 0.1);
+        }
+
+        .beneficiario-card { 
+            border: 1px dashed #cbd5e1; 
+            padding: 15px; 
+            margin-bottom: 15px; 
+            border-radius: 8px; 
+            background: #f8fafc; 
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr auto;
+            gap: 15px;
+            align-items: end;
+        }
+
+        .btn { 
+            padding: 10px 20px; 
+            background: var(--primary-blue); 
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        .btn:hover { background: var(--secondary-blue); }
+        
+        .btn-add { background: var(--accent-yellow); color: #333; margin-bottom: 15px; }
+        .btn-add:hover { background: #e0a800; }
+        
+        .btn-remove { background: #dc3545; padding: 10px 15px;}
+        .btn-remove:hover { background: #c82333; }
+
+        .btn-submit {
+            background: var(--primary-blue);
+            font-size: 16px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+
+        .alert {
+            padding: 15px; 
+            margin-bottom: 20px; 
+            border-radius: var(--border-radius);
+            font-weight: bold;
+        }
+        .alert-success { background-color: #d1fae5; color: #065f46; border-left: 5px solid #10b981; }
+        .alert-error { background-color: #fee2e2; color: #991b1b; border-left: 5px solid #ef4444; }
+
+        @media (max-width: 768px) {
+            .bento-container { grid-template-columns: 1fr; }
+            .beneficiario-card { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="nav-container">
+    <a href="{{ url_for('estadisticas') }}" class="btn-volver">Ver Estadísticas</a>
+</div>
+
+    <h2 class="header-title">Registro de Títulos de Tierras Urbanas</h2>
+
+<div class="bento-container">
+    
+    <div class="full-width">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+    </div>
+
+    <form method="POST" enctype="multipart/form-data" class="bento-container full-width" style="margin:0; gap:20px;">
+        
+        <div class="bento-card full-width card-tricolor ">
+            <h3>Ubicación Geográfica</h3>
+            
+            <div class="form-group">
+                <label>Estado</label>
+                <select name="estado" id="estado" required onchange="cargarMunicipios()">
+                    <option value="">Seleccione un Estado...</option>
+                    {% for estado in estados %}
+                        <option value="{{ estado.id }}">{{ estado.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Municipio</label>
+                <select name="municipio" id="municipio" required onchange="cargarParroquias()" disabled>
+                    <option value="">Seleccione un Municipio...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Parroquia</label>
+                <select name="parroquia" id="parroquia" required disabled onchange="cargarJuntas()">
+                    <option value="">Seleccione una Parroquia...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Junta Comunal (Casada a Parroquia)</label>
+                <select name="junta_comunal" id="junta_comunal" required disabled>
+                    <option value="">Seleccione una Junta Comunal...</option>
+                </select>
+            </div>
+            
+            <div class="form-group full-width">
+                <label>Circuito Comunal</label>
+                <select name="circuito_comunal" required>
+                    <option value="">Seleccione un Circuito...</option>
+                    {% for circ in circuitos %}<option value="{{ circ.id }}">{{ circ.nombre }}</option>{% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group full-width">
+                <label>Dirección Específica</label>
+                <input type="text" name="direccion_especifica" style="text-transform: uppercase;" required>
+            </div>
+        </div>
+
+        <div class="bento-card full-width" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <h3 class="full-width">Datos Registrales</h3>
+        
+            <div class="form-group"><label>Nombre del Registro</label><input type="text" name="nombre_registro" required
+                    style="text-transform: uppercase;"></div>
+            <div class="form-group"><label>Número de Registro</label><input type="text" name="numero_registro" required
+                    style="text-transform: uppercase;"></div>
+            <div class="form-group"><label>Tomo</label><input type="text" name="tomo" required
+                    style="text-transform: uppercase;"></div>
+            <div class="form-group"><label>Protocolo</label><input type="text" name="protocolo" required
+                    style="text-transform: uppercase;"></div>
+            <div class="form-group"><label>Folio</label><input type="text" name="folio" required
+                    style="text-transform: uppercase;"></div>
+            <div class="form-group"><label>Fecha de Protocolización</label><input type="date" name="fecha_protocolizacion"
+                    max="{{ fecha_actual }}" required></div>
+            <div class="form-group"><label>Número de Asiento</label><input type="text" name="numero_asiento" required
+                    style="text-transform: uppercase;"></div>
+            <div class="form-group"><label>Número de Matrícula</label><input type="text" name="numero_matricula" required
+                    style="text-transform: uppercase;"></div>
+        
+            <div class="form-group">
+                <label>Matriz Perteneciente</label>
+                <select name="matriz_perteneciente" required>
+                    <option value="">Seleccione...</option>
+                    {% for matriz in matrices %}<option value="{{ matriz.id }}">{{ matriz.nombre }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Medida Jurídica</label>
+                <select name="medida_juridica" required>
+                    <option value="">Seleccione...</option>
+                    {% for mj in medidas_jur %}<option value="{{ mj.id }}">{{ mj.nombre }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Origen del Terreno</label>
+                <select name="origen_terreno" required>
+                    <option value="">Seleccione...</option>
+                    {% for origen in origenes %}<option value="{{ origen.id }}">{{ origen.nombre }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Condición Legal Registral</label>
+                <select name="condicion_legal_registral" required>
+                    <option value="">Seleccione...</option>
+                    {% for cond in condiciones_reg %}<option value="{{ cond.id }}">{{ cond.nombre }}</option>{% endfor %}
+                </select>
+            </div>
+        
+            <div class="form-group"><label>Número de Resolución</label><input type="text" name="numero_resolucion" required
+                    style="text-transform: uppercase;"></div>
+            <div class="form-group"><label>Número de Gaceta Oficial</label><input type="text" name="numero_gaceta" required
+                    style="text-transform: uppercase;"></div>
+            <div class="form-group"><label>Número de Página</label><input type="text" name="numero_pagina" required
+                    style="text-transform: uppercase;"></div>
+        
+            <div class="form-group">
+                <label>Estatus</label>
+                <select name="estatus" required>
+                    <option value="">Seleccione...</option>
+                    {% for est in estatus_reg %}<option value="{{ est.id }}">{{ est.nombre }}</option>{% endfor %}
+                </select>
+            </div>
+        
+            <div class="form-group full-width" style="margin-top: 25px; border-top: 1px solid #ddd; padding-top: 15px;">
+                <label>Documento Escaneado (PDF)</label>
+                <input type="file" name="archivo_pdf" accept=".pdf" required style="padding: 6px;">
+            </div>
+        </div>
+
+        <div class="bento-card full-width" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <h3 class="full-width">Linderos y Características del Terreno</h3>
+        
+            <div class="form-group"><label>Lindero Norte</label><input type="text" name="lindero_norte" required
+                    style="text-transform: uppercase;"></div>
+            <div class="form-group"><label>Lindero Sur</label><input type="text" name="lindero_sur" required
+                    style="text-transform: uppercase;"></div>
+            <div class="form-group"><label>Lindero Este</label><input type="text" name="lindero_este" required
+                    style="text-transform: uppercase;"></div>
+            <div class="form-group"><label>Lindero Oeste</label><input type="text" name="lindero_oeste" required
+                    style="text-transform: uppercase;"></div>
+        
+            <div class="form-group">
+                <label>Medida en Metros Cuadrados (m²)</label>
+                <input type="number" step="0.01" name="medida_m2" id="medida_m2" required oninput="calcularHectareas()">
+            </div>
+            <div class="form-group">
+                <label>Medida en Hectáreas (ha)</label>
+                <input type="text" id="medida_ha" readonly style="background-color: #e9ecef; cursor: not-allowed;"
+                    placeholder="Autocalculado">
+            </div>
+        
+            <div class="form-group">
+                <label>Uso Actual</label>
+                <select name="uso_actual" required>
+                    <option value="">Seleccione...</option>
+                    {% for uso in usos %}<option value="{{ uso.id }}">{{ uso.nombre }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Condición Legal del Terreno</label>
+                <select name="condicion_terreno" required>
+                    <option value="">Seleccione...</option>
+                    <option value="PUBLICO">PÚBLICO</option>
+                    <option value="PRIVADO">PRIVADO</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="bento-card full-width">
+            <h3>Beneficiarios del Título</h3>
+            <button type="button" class="btn btn-add" onclick="agregarBeneficiario()">+ Añadir Beneficiario Adicional</button>
+            
+            <div id="contenedor-beneficiarios">
+                <div class="beneficiario-card">
+                    <div class="form-group">
+                        <label>Nombres</label>
+                        <input type="text" name="nombres[]" required placeholder="EJ. JUAN CARLOS" style="text-transform: uppercase;">
+                    </div>
+                    <div class="form-group">
+                        <label>Apellidos</label>
+                        <input type="text" name="apellidos[]" required placeholder="EJ. PÉREZ" style="text-transform: uppercase;">
+                    </div>
+                    <div class="form-group">
+                        <label>Cédula de Identidad</label>
+                        <input type="text" name="cedulas[]" required placeholder="EJ. V-12345678" style="text-transform: uppercase;">
+                    </div>
+                    <div class="form-group"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="full-width">
+            <button type="submit" class="btn btn-submit full-width">Procesar Registro y Guardar PDF</button>
+        </div>
+
+    </form>
+</div>
+
+<script>
+    // 1. Cálculo en tiempo real de m2 a hectáreas
+    function calcularHectareas() {
+        const m2 = document.getElementById('medida_m2').value;
+        const ha = document.getElementById('medida_ha');
+        if(m2 && !isNaN(m2)) {
+            ha.value = (parseFloat(m2) / 10000).toFixed(4);
+        } else {
+            ha.value = '';
+        }
+    }
+
+    // 2. Lógica para añadir múltiples beneficiarios dinámicamente
+    function agregarBeneficiario() {
+        const contenedor = document.getElementById('contenedor-beneficiarios');
+        const card = document.createElement('div');
+        card.className = 'beneficiario-card';
+        card.innerHTML = `
+            <div class="form-group">
+                <label>Nombres</label>
+                <input type="text" name="nombres[]" required style="text-transform: uppercase;">
+            </div>
+            <div class="form-group">
+                <label>Apellidos</label>
+                <input type="text" name="apellidos[]" required style="text-transform: uppercase;">
+            </div>
+            <div class="form-group">
+                <label>Cédula de Identidad</label>
+                <input type="text" name="cedulas[]" required style="text-transform: uppercase;">
+            </div>
+            <div class="form-group" style="text-align: right;">
+                <button type="button" class="btn btn-remove" onclick="this.closest('.beneficiario-card').remove()">Quitar</button>
+            </div>
+        `;
+        contenedor.appendChild(card);
+    }
+
+    // 3. Consultas AJAX en cascada a la Base de Datos
+    async function cargarMunicipios() {
+        const estadoId = document.getElementById('estado').value;
+        const municipioSelect = document.getElementById('municipio');
+        const parroquiaSelect = document.getElementById('parroquia');
+        const juntaSelect = document.getElementById('junta_comunal');
+        
+        // Limpiamos los campos inferiores
+        municipioSelect.innerHTML = '<option value="">Seleccione un Municipio...</option>';
+        parroquiaSelect.innerHTML = '<option value="">Seleccione una Parroquia...</option>';
+        juntaSelect.innerHTML = '<option value="">Seleccione una Junta Comunal...</option>';
+        
+        if(estadoId) {
+            municipioSelect.disabled = false;
+            const response = await fetch(`/get_municipios/${estadoId}`);
+            const data = await response.json();
+            
+            data.forEach(mun => {
+                municipioSelect.innerHTML += `<option value="${mun.id}">${mun.nombre}</option>`;
+            });
+        } else {
+            municipioSelect.disabled = true;
+            parroquiaSelect.disabled = true;
+            juntaSelect.disabled = true;
+        }
+    }
+
+    async function cargarParroquias() {
+        const municipioId = document.getElementById('municipio').value;
+        const parroquiaSelect = document.getElementById('parroquia');
+        const juntaSelect = document.getElementById('junta_comunal');
+        
+        // Limpiamos los campos inferiores
+        parroquiaSelect.innerHTML = '<option value="">Seleccione una Parroquia...</option>';
+        juntaSelect.innerHTML = '<option value="">Seleccione una Junta Comunal...</option>';
+        juntaSelect.disabled = true;
+
+        if(municipioId) {
+            parroquiaSelect.disabled = false;
+            const response = await fetch(`/get_parroquias/${municipioId}`);
+            const data = await response.json();
+            
+            data.forEach(parq => {
+                parroquiaSelect.innerHTML += `<option value="${parq.id}">${parq.nombre}</option>`;
+            });
+        } else {
+            parroquiaSelect.disabled = true;
+        }
+    }
+
+    async function cargarJuntas() {
+        const parroquiaId = document.getElementById('parroquia').value;
+        const juntaSelect = document.getElementById('junta_comunal');
+        
+        juntaSelect.innerHTML = '<option value="">Seleccione una Junta Comunal...</option>';
+
+        if(parroquiaId) {
+            juntaSelect.disabled = false;
+            const response = await fetch(`/get_juntas/${parroquiaId}`);
+            const data = await response.json();
+            
+            data.forEach(j => {
+                juntaSelect.innerHTML += `<option value="${j.id}">${j.nombre}</option>`;
+            });
+        } else {
+            juntaSelect.disabled = true;
+        }
+    }
+</script>
+
+</body>
+</html>

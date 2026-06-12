@@ -50,15 +50,47 @@ class Titulo(db.Model):
     __tablename__ = 'titulos'
     id = db.Column(db.Integer, primary_key=True)
     
-    # Relaciones relacionales con la división territorial
+    # 1. Ubicación Geográfica
     estado_id = db.Column(db.Integer, db.ForeignKey('estados.id'), nullable=False)
     municipio_id = db.Column(db.Integer, db.ForeignKey('municipios.id'), nullable=False)
     parroquia_id = db.Column(db.Integer, db.ForeignKey('parroquias.id'), nullable=False)
+    circuito_id = db.Column(db.Integer, db.ForeignKey('circuitos_comunales.id'), nullable=False)
+    junta_id = db.Column(db.Integer, db.ForeignKey('juntas_comunales.id'), nullable=False)
+    direccion_especifica = db.Column(db.Text, nullable=False)
     
+    # 2. Linderos y Terreno
+    lindero_norte = db.Column(db.String(255), nullable=False)
+    lindero_sur = db.Column(db.String(255), nullable=False)
+    lindero_este = db.Column(db.String(255), nullable=False)
+    lindero_oeste = db.Column(db.String(255), nullable=False)
+    medida_m2 = db.Column(db.Numeric(12, 2), nullable=False)
+    medida_ha = db.Column(db.Numeric(12, 4), nullable=False) # 4 decimales estándar para hectáreas
+    uso_actual_id = db.Column(db.Integer, db.ForeignKey('usos_actuales.id'), nullable=False)
+    condicion_terreno = db.Column(db.String(50), nullable=False) # 'Público' o 'Privado'
+    
+    # 3. Datos Registrales
+    nombre_registro = db.Column(db.String(255), nullable=False)
+    numero_registro = db.Column(db.String(100), nullable=False)
+    tomo = db.Column(db.String(50), nullable=False)
+    protocolo = db.Column(db.String(50), nullable=False)
+    folio = db.Column(db.String(50), nullable=False)
     fecha_protocolizacion = db.Column(db.Date, nullable=False)
+    numero_asiento = db.Column(db.String(100), nullable=False)
+    numero_matricula = db.Column(db.String(100), nullable=False)
+    
+    matriz_id = db.Column(db.Integer, db.ForeignKey('matrices_terreno.id'), nullable=False)
+    medida_jur_id = db.Column(db.Integer, db.ForeignKey('medidas_juridicas.id'), nullable=False)
+    origen_id = db.Column(db.Integer, db.ForeignKey('origenes_terreno.id'), nullable=False)
+    cond_legal_reg_id = db.Column(db.Integer, db.ForeignKey('condiciones_legales_registrales.id'), nullable=False)
+    numero_resolucion = db.Column(db.String(100), nullable=False)
+    numero_gaceta = db.Column(db.String(100), nullable=False)
+    numero_pagina = db.Column(db.String(50), nullable=False)
+    estatus_id = db.Column(db.Integer, db.ForeignKey('estatus_registrales.id'), nullable=False)
+    
+    # Archivo físico
     ruta_archivo = db.Column(db.String(255), nullable=False)
     
-    # Relaciones para consultas rápidas
+    # Relaciones y Beneficiarios
     rel_estado = db.relationship('Estado')
     rel_municipio = db.relationship('Municipio')
     rel_parroquia = db.relationship('Parroquia')
@@ -71,6 +103,48 @@ class Beneficiario(db.Model):
     apellidos = db.Column(db.String(150), nullable=False)
     cedula = db.Column(db.String(20), nullable=False)
     titulo_id = db.Column(db.Integer, db.ForeignKey('titulos.id'), nullable=False)
+
+# --- NUEVAS TABLAS CATALÓGICAS ---
+class CircuitoComunal(db.Model):
+    __tablename__ = 'circuitos_comunales'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(150), nullable=False)
+
+class JuntaComunal(db.Model):
+    __tablename__ = 'juntas_comunales'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(150), nullable=False)
+    parroquia_id = db.Column(db.Integer, db.ForeignKey('parroquias.id'), nullable=False)
+
+class UsoActual(db.Model):
+    __tablename__ = 'usos_actuales'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(150), nullable=False)
+
+class MatrizTerreno(db.Model):
+    __tablename__ = 'matrices_terreno'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(150), nullable=False)
+
+class MedidaJuridica(db.Model):
+    __tablename__ = 'medidas_juridicas'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(150), nullable=False)
+
+class OrigenTerreno(db.Model):
+    __tablename__ = 'origenes_terreno'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(150), nullable=False)
+
+class CondicionLegalRegistral(db.Model):
+    __tablename__ = 'condiciones_legales_registrales'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(150), nullable=False)
+
+class EstatusRegistral(db.Model):
+    __tablename__ = 'estatus_registrales'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(150), nullable=False)
 
 
 # Crear las tablas dentro del contexto si no existen
@@ -85,11 +159,13 @@ def registro():
     if request.method == 'POST':
         
         # ==========================================
-        # 1. CAPTURA DE DATOS (Primero extraemos todo)
+        # 1. CAPTURA DE DATOS
         # ==========================================
         estado_id = request.form.get('estado')
         municipio_id = request.form.get('municipio')
         parroquia_id = request.form.get('parroquia')
+        circuito_id = request.form.get('circuito_comunal')
+        junta_id = request.form.get('junta_comunal') # Capturamos la junta
         fecha_prot_str = request.form.get('fecha_protocolizacion')
         
         # Captura y conversión a mayúsculas
@@ -102,8 +178,8 @@ def registro():
         # ==========================================
         
         # Validar campos generales de ubicación y fecha
-        if not estado_id or not municipio_id or not parroquia_id or not fecha_prot_str:
-            flash('Error de seguridad: Todos los campos de ubicación y fecha son obligatorios.', 'error')
+        if not estado_id or not municipio_id or not parroquia_id or not circuito_id or not junta_id:
+            flash('Error: Todos los campos de ubicación (incluyendo Circuito y Junta Comunal) son obligatorios. Si no aparecen juntas comunales, debe registrarlas primero en el sistema.', 'error')
             return redirect(request.url)
 
         # Validar que las listas de beneficiarios no estén vacías
@@ -158,12 +234,49 @@ def registro():
         else:
             os.rename(ruta_temp, ruta_final)
 
+        
+        # Captura de medidas y cálculo en backend por seguridad
+        m2_str = request.form.get('medida_m2').replace(',', '.') # Por si el usuario usa coma decimal
+        medida_m2_float = float(m2_str)
+        medida_ha_float = medida_m2_float / 10000.0
+
+        
         # 4. Inserción en PostgreSQL
         nuevo_titulo = Titulo(
             estado_id=estado_id, 
             municipio_id=municipio_id, 
             parroquia_id=parroquia_id, 
+            circuito_id=request.form.get('circuito_comunal'),
+            junta_id=request.form.get('junta_comunal'),
+            direccion_especifica=request.form.get('direccion_especifica').upper(),
+            
+            lindero_norte=request.form.get('lindero_norte').upper(),
+            lindero_sur=request.form.get('lindero_sur').upper(),
+            lindero_este=request.form.get('lindero_este').upper(),
+            lindero_oeste=request.form.get('lindero_oeste').upper(),
+            medida_m2=medida_m2_float,
+            medida_ha=medida_ha_float,
+            uso_actual_id=request.form.get('uso_actual'),
+            condicion_terreno=request.form.get('condicion_terreno'),
+            
+            nombre_registro=request.form.get('nombre_registro').upper(),
+            numero_registro=request.form.get('numero_registro').upper(),
+            tomo=request.form.get('tomo').upper(),
+            protocolo=request.form.get('protocolo').upper(),
+            folio=request.form.get('folio').upper(),
             fecha_protocolizacion=fecha_obj,
+            numero_asiento=request.form.get('numero_asiento').upper(),
+            numero_matricula=request.form.get('numero_matricula').upper(),
+            
+            matriz_id=request.form.get('matriz_perteneciente'),
+            medida_jur_id=request.form.get('medida_juridica'),
+            origen_id=request.form.get('origen_terreno'),
+            cond_legal_reg_id=request.form.get('condicion_legal_registral'),
+            numero_resolucion=request.form.get('numero_resolucion').upper(),
+            numero_gaceta=request.form.get('numero_gaceta').upper(),
+            numero_pagina=request.form.get('numero_pagina').upper(),
+            estatus_id=request.form.get('estatus'),
+            
             ruta_archivo=ruta_final
         )
         db.session.add(nuevo_titulo)
@@ -178,9 +291,19 @@ def registro():
         return redirect(url_for('registro'))
 
     estados = Estado.query.order_by(Estado.nombre.asc()).all()
-    # Pasamos la fecha actual al template para bloquear fechas futuras en el calendario HTML
+    circuitos = CircuitoComunal.query.order_by(CircuitoComunal.nombre.asc()).all()
+    usos = UsoActual.query.order_by(UsoActual.nombre.asc()).all()
+    matrices = MatrizTerreno.query.order_by(MatrizTerreno.nombre.asc()).all()
+    medidas_jur = MedidaJuridica.query.order_by(MedidaJuridica.nombre.asc()).all()
+    origenes = OrigenTerreno.query.order_by(OrigenTerreno.nombre.asc()).all()
+    condiciones_reg = CondicionLegalRegistral.query.order_by(CondicionLegalRegistral.nombre.asc()).all()
+    estatus_reg = EstatusRegistral.query.order_by(EstatusRegistral.nombre.asc()).all()
+    
     fecha_actual = datetime.now().strftime('%Y-%m-%d')
-    return render_template('index.html', estados=estados, fecha_actual=fecha_actual)
+    return render_template('index.html', estados=estados, fecha_actual=fecha_actual, 
+                           circuitos=circuitos, usos=usos, matrices=matrices, 
+                           medidas_jur=medidas_jur, origenes=origenes, 
+                           condiciones_reg=condiciones_reg, estatus_reg=estatus_reg)
 
 
 # --- ENDPOINTS REST PARA SELECTS DINÁMICOS (AJAX) ---
@@ -197,6 +320,10 @@ def get_parroquias(municipio_id):
     parroquias = Parroquia.query.filter_by(municipio_id=municipio_id).order_by(Parroquia.nombre.asc()).all()
     return jsonify([{"id": p.id, "nombre": p.nombre} for p in parroquias])
 
+@app.route('/get_juntas/<int:parroquia_id>')
+def get_juntas(parroquia_id):
+    juntas = JuntaComunal.query.filter_by(parroquia_id=parroquia_id).order_by(JuntaComunal.nombre.asc()).all()
+    return jsonify([{"id": j.id, "nombre": j.nombre} for j in juntas])
 
 # --- RUTA DE ESTADÍSTICAS Y BÚSQUEDA ---
 @app.route('/estadisticas', methods=['GET'])

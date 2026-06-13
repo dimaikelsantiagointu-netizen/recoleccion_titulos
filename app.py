@@ -242,52 +242,65 @@ def registro():
 
         
         # 4. Inserción en PostgreSQL
-        nuevo_titulo = Titulo(
-            estado_id=estado_id, 
-            municipio_id=municipio_id, 
-            parroquia_id=parroquia_id, 
-            circuito_id=request.form.get('circuito_comunal'),
-            junta_id=request.form.get('junta_comunal'),
-            direccion_especifica=request.form.get('direccion_especifica').upper(),
-            
-            lindero_norte=request.form.get('lindero_norte').upper(),
-            lindero_sur=request.form.get('lindero_sur').upper(),
-            lindero_este=request.form.get('lindero_este').upper(),
-            lindero_oeste=request.form.get('lindero_oeste').upper(),
-            medida_m2=medida_m2_float,
-            medida_ha=medida_ha_float,
-            uso_actual_id=request.form.get('uso_actual'),
-            condicion_terreno=request.form.get('condicion_terreno'),
-            
-            nombre_registro=request.form.get('nombre_registro').upper(),
-            numero_registro=request.form.get('numero_registro').upper(),
-            tomo=request.form.get('tomo').upper(),
-            protocolo=request.form.get('protocolo').upper(),
-            folio=request.form.get('folio').upper(),
-            fecha_protocolizacion=fecha_obj,
-            numero_asiento=request.form.get('numero_asiento').upper(),
-            numero_matricula=request.form.get('numero_matricula').upper(),
-            
-            matriz_id=request.form.get('matriz_perteneciente'),
-            medida_jur_id=request.form.get('medida_juridica'),
-            origen_id=request.form.get('origen_terreno'),
-            cond_legal_reg_id=request.form.get('condicion_legal_registral'),
-            numero_resolucion=request.form.get('numero_resolucion').upper(),
-            numero_gaceta=request.form.get('numero_gaceta').upper(),
-            numero_pagina=request.form.get('numero_pagina').upper(),
-            estatus_id=request.form.get('estatus'),
-            
-            ruta_archivo=ruta_final
-        )
-        db.session.add(nuevo_titulo)
-        db.session.flush()
+        try:
+            nuevo_titulo = Titulo(
+                estado_id=estado_id, 
+                municipio_id=municipio_id, 
+                parroquia_id=parroquia_id, 
+                circuito_id=request.form.get('circuito_comunal'),
+                junta_id=request.form.get('junta_comunal'),
+                direccion_especifica=request.form.get('direccion_especifica').upper(),
+                
+                lindero_norte=request.form.get('lindero_norte').upper(),
+                lindero_sur=request.form.get('lindero_sur').upper(),
+                lindero_este=request.form.get('lindero_este').upper(),
+                lindero_oeste=request.form.get('lindero_oeste').upper(),
+                medida_m2=medida_m2_float,
+                medida_ha=medida_ha_float,
+                uso_actual_id=request.form.get('uso_actual'),
+                condicion_terreno=request.form.get('condicion_terreno'),
+                
+                nombre_registro=request.form.get('nombre_registro').upper(),
+                numero_registro=request.form.get('numero_registro').upper(),
+                tomo=request.form.get('tomo').upper(),
+                protocolo=request.form.get('protocolo').upper(),
+                folio=request.form.get('folio').upper(),
+                fecha_protocolizacion=fecha_obj,
+                numero_asiento=request.form.get('numero_asiento').upper(),
+                numero_matricula=request.form.get('numero_matricula').upper(),
+                
+                matriz_id=request.form.get('matriz_perteneciente'),
+                medida_jur_id=request.form.get('medida_juridica'),
+                origen_id=request.form.get('origen_terreno'),
+                cond_legal_reg_id=request.form.get('condicion_legal_registral'),
+                numero_resolucion=request.form.get('numero_resolucion').upper(),
+                numero_gaceta=request.form.get('numero_gaceta').upper(),
+                numero_pagina=request.form.get('numero_pagina').upper(),
+                estatus_id=request.form.get('estatus'),
+                
+                ruta_archivo=ruta_final
+            )
+            db.session.add(nuevo_titulo)
+            db.session.flush()
 
-        for n, a, c in zip(nombres, apellidos, cedulas):
-            nuevo_beneficiario = Beneficiario(nombres=n, apellidos=a, cedula=c, titulo_id=nuevo_titulo.id)
-            db.session.add(nuevo_beneficiario)
+            for n, a, c in zip(nombres, apellidos, cedulas):
+                # Sanitización adicional por seguridad (asegura prefijo y números)
+                cedula_limpia = c.replace(".", "").replace(" ", "").upper()
+                nuevo_beneficiario = Beneficiario(nombres=n, apellidos=a, cedula=cedula_limpia, titulo_id=nuevo_titulo.id)
+                db.session.add(nuevo_beneficiario)
 
-        db.session.commit()
-        flash('Título e historial de beneficiarios registrados y optimizados correctamente.', 'success')
+            db.session.commit()
+            flash('Título e historial de beneficiarios registrados y optimizados correctamente.', 'success')
+            
+        except Exception as e:
+            # Si ocurre cualquier error, deshacemos la transacción en la BD
+            db.session.rollback()
+            # Eliminamos el archivo PDF que se guardó temporalmente si la BD falla
+            if os.path.exists(ruta_final):
+                os.remove(ruta_final)
+                
+            flash(f'Error crítico al procesar los datos. Verifique que no haya incluido caracteres no permitidos. Detalles técnicos: {str(e)}', 'error')
+            
         return redirect(url_for('registro'))
 
     estados = Estado.query.order_by(Estado.nombre.asc()).all()

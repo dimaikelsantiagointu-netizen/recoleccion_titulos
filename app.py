@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+import re
 from flask import Flask, render_template, request, jsonify, flash, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
@@ -8,6 +9,9 @@ from sqlalchemy import func
 from sqlalchemy import func, or_
 from flask import send_from_directory
 from dotenv import load_dotenv
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
 
 # Cargar las variables desde el archivo .env
 load_dotenv()
@@ -19,8 +23,87 @@ app.secret_key = os.environ.get("SECRET_KEY", "clave_respaldo_por_defecto")
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'pdfs'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 db = SQLAlchemy(app)
+
+# --- CONFIGURACIÓN DE FLASK-LOGIN ---
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = "Por favor, inicie sesión para acceder al sistema."
+login_manager.login_message_category = "error"
+
+
+# --- NUEVOS MODELOS DE USUARIO Y AUDITORÍA ---
+class Rol(db.Model):
+    __tablename__ = 'roles'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(50), unique=True, nullable=False)
+
+class Usuario(UserMixin, db.Model):
+    __tablename__ = 'usuarios'
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    apellido = db.Column(db.String(100), nullable=False)
+    cedula = db.Column(db.String(20), unique=True, nullable=False)
+    telefono = db.Column(db.String(20), nullable=False)
+    email = db.Column(db.String(100), unique=True, nullable=False)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    rol_id = db.Column(db.Integer, db.ForeignKey('roles.id'), nullable=False)
+    activo = db.Column(db.Boolean, default=True)
+    
+    rel_rol = db.relationship('Rol')
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+class Auditoria(db.Model):
+    __tablename__ = 'auditoria'
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    accion = db.Column(db.String(255), nullable=False)
+    detalles = db.Column(db.Text, nullable=True)
+    ip = db.Column(db.String(50), nullable=True)
+    fecha = db.Column(db.DateTime, default=datetime.now)
+    
+    rel_usuario = db.relationship('Usuario')
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(Usuario, int(user_id))
+
+# --- GENERACIÓN AUTOMÁTICA DE ROLES Y ADMIN POR DEFECTO ---
+with app.app_context():
+    db.create_all()
+    
+    # Crear roles si no existen
+    roles_por_defecto = ['ADMINISTRADOR', 'ANALISTA', 'CONSULTA']
+    for nombre_rol in roles_por_defecto:
+        if not Rol.query.filter_by(nombre=nombre_rol).first():
+            db.session.add(Rol(nombre=nombre_rol))
+    db.session.commit()
+
+    # Crear usuario administrador maestro si no existe
+    if not Usuario.query.filter_by(username='admin').first():
+        rol_admin = Rol.query.filter_by(nombre='ADMINISTRADOR').first()
+        nuevo_admin = Usuario(
+            username='admin', 
+            rol_id=rol_admin.id,
+            nombre='ADMINISTRADOR',
+            apellido='SISTEMA',
+            cedula='00000000',
+            telefono='0000000000',
+            email='admin@intu.gob.ve'
+        )
+        nuevo_admin.set_password('admin123') 
+        db.session.add(nuevo_admin)
+        db.session.commit()
 
 # --- MODELOS DE LA BASE DE DATOS (DIVISION TERRITORIAL) ---
 
@@ -95,6 +178,8 @@ class Titulo(db.Model):
     rel_municipio = db.relationship('Municipio')
     rel_parroquia = db.relationship('Parroquia')
     beneficiarios = db.relationship('Beneficiario', backref='titulo', lazy=True, cascade="all, delete-orphan")
+    rel_circuito = db.relationship('CircuitoComunal')
+    rel_junta = db.relationship('JuntaComunal')
 
 class Beneficiario(db.Model):
     __tablename__ = 'beneficiarios'
@@ -152,9 +237,36 @@ with app.app_context():
     db.create_all()
 
 
+# --- LÓGICA DE CONTROL DE ACCESO (RBAC) ---
+def role_required(*roles):
+    def decorator(f):
+        @wraps(f)
+        @login_required
+        def decorated_function(*args, **kwargs):
+            if current_user.rel_rol.nombre not in roles:
+                flash('Acceso denegado: Su rol no tiene permisos para esta acción.', 'error')
+                return redirect(request.referrer or url_for('estadisticas'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+# --- LÓGICA DE AUDITORÍA AUTOMÁTICA ---
+def registrar_auditoria(accion, detalles=""):
+    usuario_id = current_user.id if current_user.is_authenticated else None
+    ip = request.remote_addr
+    log = Auditoria(usuario_id=usuario_id, accion=accion, detalles=detalles, ip=ip)
+    db.session.add(log)
+    db.session.commit()
+
+
 # --- RUTAS DE LA APLICACIÓN ---
 
-@app.route('/', methods=['GET', 'POST'])
+
+
+
+@app.route('/registro', methods=['GET', 'POST'])
+@login_required
+@role_required('ADMINISTRADOR', 'ANALISTA')
 def registro():
     if request.method == 'POST':
         
@@ -173,29 +285,35 @@ def registro():
         apellidos = [a.upper().strip() for a in request.form.getlist('apellidos[]')]
         cedulas = [c.upper().strip() for c in request.form.getlist('cedulas[]')]
 
+        beneficiarios_tuple = list(zip(nombres, apellidos, cedulas))
+        beneficiarios_set = set((n, a, c) for n, a, c in beneficiarios_tuple)
+        if len(beneficiarios_tuple) != len(beneficiarios_set):
+            flash('Error: No se permiten beneficiarios duplicados en el mismo título.', 'registro_error')
+            return redirect(request.url)
+
         # ==========================================
         # 2. VALIDACIÓN ESTRICTA (Ahora sí verificamos)
         # ==========================================
         
         # Validar campos generales de ubicación y fecha
         if not estado_id or not municipio_id or not parroquia_id or not circuito_id or not junta_id:
-            flash('Error: Todos los campos de ubicación (incluyendo Circuito y Junta Comunal) son obligatorios. Si no aparecen juntas comunales, debe registrarlas primero en el sistema.', 'error')
+            flash('Error: Todos los campos de ubicación (incluyendo Circuito y Junta Comunal) son obligatorios. Si no aparecen juntas comunales, debe registrarlas primero en el sistema.', 'registro_error')
             return redirect(request.url)
 
         # Validar que las listas de beneficiarios no estén vacías
         if not nombres or not apellidos or not cedulas:
-            flash('Error de seguridad: Debe registrar al menos un beneficiario completo.', 'error')
+            flash('Error de seguridad: Debe registrar al menos un beneficiario completo.', 'registro_error')
             return redirect(request.url)
 
         # Validar que no haya campos de beneficiarios en blanco (solo espacios)
         if any(n == "" for n in nombres) or any(a == "" for a in apellidos) or any(c == "" for c in cedulas):
-            flash('Error de seguridad: Ningún campo de los beneficiarios puede quedar en blanco.', 'error')
+            flash('Error de seguridad: Ningún campo de los beneficiarios puede quedar en blanco.', 'registro_error')
             return redirect(request.url)
             
         # Validar que la fecha no sea futura
         fecha_obj = datetime.strptime(fecha_prot_str, '%Y-%m-%d')
         if fecha_obj.date() > datetime.now().date():
-            flash('Error: La fecha de protocolización no puede ser mayor a la fecha actual.', 'error')
+            flash('Error: La fecha de protocolización no puede ser mayor a la fecha actual.', 'registro_error')
             return redirect(request.url)
 
         # ==========================================
@@ -204,12 +322,12 @@ def registro():
         archivo_pdf = request.files.get('archivo_pdf')
 
         if not archivo_pdf or archivo_pdf.filename == '':
-            flash('Debe cargar un archivo PDF válido.', 'error')
+            flash('Debe cargar un archivo PDF válido.', 'registro_error')
             return redirect(request.url)
 
         entidad_estado = db.session.get(Estado, estado_id)
         if not entidad_estado:
-            flash('Estado inválido o no seleccionado.', 'error')
+            flash('Estado inválido o no seleccionado.', 'registro_error')
             return redirect(request.url)
             
         nombre_estado_slug = secure_filename(entidad_estado.nombre.lower())
@@ -220,7 +338,10 @@ def registro():
         os.makedirs(carpeta_destino, exist_ok=True)
 
         # 2. Construir la nomenclatura del archivo (la cédula ya está en mayúscula si tiene letras)
-        cedula_principal = secure_filename(cedulas[0]) if cedulas else "SIN_CEDULA"
+        cedula_principal_raw = cedulas[0] if cedulas else "SIN_CEDULA"
+        cedula_principal = re.sub(r'[^a-zA-Z0-9-]', '', cedula_principal_raw)
+        if not cedula_principal:
+            cedula_principal = "SIN_CEDULA"
         fecha_formateada = fecha_obj.strftime('%Y%m%d')
         nombre_archivo = f"{nombre_estado_slug}_{cedula_principal}_{fecha_formateada}.pdf"
         ruta_final = os.path.join(carpeta_destino, nombre_archivo)
@@ -229,10 +350,13 @@ def registro():
         ruta_temp = os.path.join(carpeta_destino, f"temp_{nombre_archivo}")
         archivo_pdf.save(ruta_temp)
         
-        if optimizar_pdf(ruta_temp, ruta_final):
+        optimizado, warning = optimizar_pdf(ruta_temp, ruta_final)
+        if optimizado:
             os.remove(ruta_temp)
         else:
             os.rename(ruta_temp, ruta_final)
+            if warning:
+                flash(f'Advertencia: {warning}', 'warning')
 
         
         # Captura de medidas y cálculo en backend por seguridad
@@ -290,7 +414,8 @@ def registro():
                 db.session.add(nuevo_beneficiario)
 
             db.session.commit()
-            flash('Título e historial de beneficiarios registrados y optimizados correctamente.', 'success')
+            registrar_auditoria("REGISTRO DE TÍTULO", f"Se registró el título con Cédula Principal: {cedula_principal}")
+            flash('Título e historial de beneficiarios registrados y optimizados correctamente.', 'registro_success')
             
         except Exception as e:
             # Si ocurre cualquier error, deshacemos la transacción en la BD
@@ -299,7 +424,7 @@ def registro():
             if os.path.exists(ruta_final):
                 os.remove(ruta_final)
                 
-            flash(f'Error crítico al procesar los datos. Verifique que no haya incluido caracteres no permitidos. Detalles técnicos: {str(e)}', 'error')
+            flash(f'Error crítico al procesar los datos. Verifique que no haya incluido caracteres no permitidos. Detalles técnicos: {str(e)}', 'registro_error')
             
         return redirect(url_for('registro'))
 
@@ -340,6 +465,8 @@ def get_juntas(parroquia_id):
 
 # --- RUTA DE ESTADÍSTICAS Y BÚSQUEDA ---
 @app.route('/estadisticas', methods=['GET'])
+@login_required
+@role_required('ADMINISTRADOR', 'CONSULTA')
 def estadisticas():
     # 1. Estadísticas Generales (Lo que ya tienes)
     total_titulos = db.session.query(Titulo).count()
@@ -356,6 +483,7 @@ def estadisticas():
     resultados_busqueda = []
 
     if query_busqueda:
+        registrar_auditoria("BÚSQUEDA REALIZADA", f"Término buscado: {query_busqueda}")
         termino = f"%{query_busqueda}%"
         # Hacemos JOIN con Estado y Beneficiario para buscar en todas partes a la vez
         resultados_busqueda = Titulo.query.join(Estado).join(Beneficiario).filter(
@@ -389,6 +517,180 @@ def ver_pdf(titulo_id):
     
     # send_from_directory es la forma segura de servir archivos en Flask
     return send_from_directory(directorio, nombre_archivo)
+
+@app.errorhandler(413)
+def too_large(e):
+    flash('El archivo es demasiado grande. El tamaño máximo es 16 MB.', 'error')
+    return redirect(request.url)
+
+# --- RUTAS DE SESIÓN ---
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('estadisticas'))
+
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        usuario = Usuario.query.filter_by(username=username).first()
+        
+        if usuario and usuario.check_password(password):
+            if not usuario.activo:
+                flash('Esta cuenta ha sido desactivada.', 'login_error')
+                return redirect(url_for('login'))
+                
+            login_user(usuario)
+            registrar_auditoria("INICIO DE SESIÓN", "El usuario accedió al sistema.")
+            
+            # Redirección inteligente según el rol
+            if usuario.rel_rol.nombre in ['ANALISTA']:
+                return redirect(url_for('registro'))
+            else:
+                return redirect(url_for('estadisticas'))
+        else:
+            registrar_auditoria("INTENTO FALLIDO", f"Intento de acceso con usuario: {username}")
+            flash('Usuario o contraseña incorrectos.', 'login_error')
+
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    registrar_auditoria("CIERRE DE SESIÓN", "El usuario salió del sistema.")
+    logout_user()
+    return redirect(url_for('login'))
+
+# --- ADMINISTRACIÓN DE USUARIOS (Solo Administrador) ---
+@app.route('/usuarios', methods=['GET', 'POST'])
+@login_required
+@role_required('ADMINISTRADOR')
+def gestion_usuarios():
+    query_busqueda = request.args.get('q', '')
+    if query_busqueda:
+        usuarios = Usuario.query.filter(Usuario.username.ilike(f'%{query_busqueda}%')).all()
+    else:
+        usuarios = Usuario.query.all()
+    
+    if request.method == 'POST':
+        # CAPTURA TODOS LOS NUEVOS CAMPOS DEL FORMULARIO
+        username = request.form.get('username')
+        password = request.form.get('password')
+        rol_id = request.form.get('rol_id')
+        nombre = request.form.get('nombre')
+        apellido = request.form.get('apellido')
+        cedula = request.form.get('cedula')
+        telefono = request.form.get('telefono')
+        email = request.form.get('email')
+
+        # Verificación de usuario existente
+        if Usuario.query.filter((Usuario.username == username) | (Usuario.email == email)).first():
+            flash('Error: El usuario o correo ya existen.', 'usuarios_error')
+        else:
+            # CREACIÓN DEL USUARIO CON TODOS LOS DATOS
+            nuevo_usuario = Usuario(
+                username=username, 
+                rol_id=rol_id,
+                nombre=nombre.upper(),
+                apellido=apellido.upper(),
+                cedula=cedula.upper(),
+                telefono=telefono,
+                email=email.lower()
+            )
+            nuevo_usuario.set_password(password)
+            db.session.add(nuevo_usuario)
+            db.session.commit()
+            registrar_auditoria("CREACIÓN DE USUARIO", f"Se creó el usuario: {username}")
+            flash('Usuario creado exitosamente.', 'usuarios_success')
+        return redirect(url_for('gestion_usuarios'))
+
+    usuarios = Usuario.query.all()
+    roles = Rol.query.all()
+    return render_template('usuarios.html', usuarios=usuarios, roles=roles)
+
+@app.route('/usuarios/editar/<int:id>', methods=['POST'])
+@login_required
+@role_required('ADMINISTRADOR')
+def editar_usuario(id):
+    usuario = Usuario.query.get_or_404(id)
+    
+    # Capturar todos los campos del formulario
+    usuario.username = request.form.get('username')
+    usuario.nombre = request.form.get('nombre').upper()
+    usuario.apellido = request.form.get('apellido').upper()
+    usuario.cedula = request.form.get('cedula').upper()
+    usuario.telefono = request.form.get('telefono')
+    usuario.email = request.form.get('email').lower()
+    usuario.rol_id = int(request.form.get('rol_id'))
+    usuario.activo = request.form.get('activo') == 'true'  # Ahora recibe 'true' o 'false'
+    
+    # Si se proporcionó una nueva contraseña, actualizarla
+    nueva_password = request.form.get('password')
+    if nueva_password and nueva_password.strip():
+        usuario.set_password(nueva_password)
+    
+    db.session.commit()
+    
+    registrar_auditoria("EDICIÓN DE USUARIO", f"Usuario {usuario.username} actualizado")
+    
+    flash('Usuario actualizado correctamente.', 'usuarios_success')
+    return redirect(url_for('gestion_usuarios'))
+
+@app.route('/usuarios/obtener/<int:id>', methods=['GET'])
+@login_required
+@role_required('ADMINISTRADOR')
+def obtener_usuario(id):
+    """Retorna los datos de un usuario en formato JSON para editar en modal"""
+    usuario = Usuario.query.get_or_404(id)
+    return jsonify({
+        'id': usuario.id,
+        'username': usuario.username,
+        'nombre': usuario.nombre,
+        'apellido': usuario.apellido,
+        'cedula': usuario.cedula,
+        'telefono': usuario.telefono,
+        'email': usuario.email,
+        'rol_id': usuario.rol_id,
+        'activo': usuario.activo
+    })
+
+
+# --- VISOR DE AUDITORÍA (Solo Administrador) ---
+@app.route('/auditoria')
+@login_required
+@role_required('ADMINISTRADOR')
+def ver_auditoria():
+    # Capturar parámetros
+    fecha_inicio = request.args.get('fecha_inicio')
+    fecha_fin = request.args.get('fecha_fin')
+    username_filtro = request.args.get('usuario')
+    accion = request.args.get('accion')
+
+    # Iniciamos el query haciendo JOIN con la tabla Usuario
+    query = db.session.query(Auditoria).join(Usuario, Auditoria.usuario_id == Usuario.id)
+
+    # Filtros
+    if fecha_inicio:
+        query = query.filter(func.date(Auditoria.fecha) >= datetime.strptime(fecha_inicio, '%Y-%m-%d').date())
+    if fecha_fin:
+        query = query.filter(func.date(Auditoria.fecha) <= datetime.strptime(fecha_fin, '%Y-%m-%d').date())
+    if username_filtro:
+        query = query.filter(Usuario.username.ilike(f'%{username_filtro}%'))
+    if accion:
+        query = query.filter(Auditoria.accion == accion)
+
+    # Agregar después de los filtros:
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+    pagination = query.order_by(Auditoria.fecha.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    registros = pagination.items
+    
+    # Obtener acciones únicas para el desplegable
+    acciones_disponibles = db.session.query(Auditoria.accion).distinct().all()
+
+    return render_template('auditoria.html', 
+                           logs=registros, 
+                           pagination=pagination,  # ← IMPORTANTE: esto debe estar
+                           acciones=acciones_disponibles)
 
 
 if __name__ == '__main__':

@@ -248,8 +248,10 @@
             <a href="{{ url_for('registro') }}"
                 style="color: #555; text-decoration: none; font-weight: bold;">Registro</a>
             {% endif %}
+            {% if current_user.rel_rol.nombre in ['ADMINISTRADOR', 'CONSULTA'] %}
             <a href="{{ url_for('estadisticas') }}"
                 style="color: #555; text-decoration: none; font-weight: bold;">Estadísticas</a>
+            {% endif %}
 
             {% if current_user.rel_rol.nombre == 'ADMINISTRADOR' %}
             <a href="{{ url_for('gestion_usuarios') }}"

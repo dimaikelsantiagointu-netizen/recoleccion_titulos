@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Usuarios - Títulos de Tierras Urbanas</title>
+    <style>
+        :root {
+            --primary-blue: #003876;
+            --secondary-blue: #0056b3;
+            --accent-yellow: #FFC107;
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --text-dark: #333333;
+            --border-radius: 12px;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-dark);
+            padding: 20px;
+            margin: 0;
+            /* Aplicamos tu textura de fondo */
+            background-color: #f0f2f5;
+            /* Color de fondo base para que la textura se vea bien */
+            background-image: linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)),
+            url("{{ url_for('static', filename='textura.png') }}");
+            background-repeat: repeat;
+            background-size: 1500px;
+        }
+
+        .bento-container {
+            max-width: 1200px;
+            margin: auto;
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+        }
+
+        .bento-card {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card-tricolor::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 6px;
+            background: linear-gradient(to right, #FCE300 33.3%, #0038A8 33.3%, #0038A8 66.6%, #CE1126 66.6%);
+        }
+
+        h3 {
+            margin-top: 0;
+            color: var(--primary-blue);
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px rgba(0, 56, 118, 0.1);
+        }
+
+        .input-error {
+            border-color: #dc3545 !important;
+            box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1) !important;
+        }
+
+        .error-message {
+            color: #dc3545;
+            font-size: 0.75em;
+            margin-top: 4px;
+            display: none;
+            font-weight: bold;
+        }
+
+        .btn-submit {
+            background: var(--primary-blue);
+            color: white;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+            margin-top: 10px;
+            transition: background 0.2s;
+        }
+
+        .btn-submit:hover {
+            background: var(--secondary-blue);
+        }
+
+        .btn-editar {
+            background: var(--accent-yellow);
+            color: #333;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-right: 5px;
+            transition: background 0.2s;
+        }
+
+        .btn-editar:hover {
+            background: #e0a800;
+        }
+
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: var(--border-radius);
+            font-weight: bold;
+        }
+
+        .alert-success {
+            background-color: #d1fae5;
+            color: #065f46;
+            border-left: 5px solid #10b981;
+        }
+
+        .alert-error {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border-left: 5px solid #ef4444;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f8fafc;
+            color: var(--primary-blue);
+        }
+
+        .badge-activo {
+            background-color: #10b981;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .badge-inactivo {
+            background-color: #ef4444;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        /* MODAL STYLES */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 600px;
+            position: relative;
+            animation: slideDown 0.3s ease;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #edf2f7;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        input[readonly] {
+            background-color: #f0f2f5;
+            cursor: not-allowed;
+            border-color: #e2e8f0;
+        }
+
+        .alert-usuarios_success {
+            background-color: #d1fae5;
+            color: #065f46;
+            border-left: 5px solid #10b981;
+        }
+
+        .alert-usuarios_error {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border-left: 5px solid #ef4444;
+        }
+
+        @media (max-width: 768px) {
+            .bento-container {
+                grid-template-columns: 1fr;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div
+        style="background: white; padding: 15px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-weight: bold; color: #003876;">
+            SESIÓN ACTIVA: {{ current_user.username | upper }} | ROL: {{ current_user.rel_rol.nombre }}
+        </div>
+        <div style="display: flex; gap: 15px;">
+            {% if current_user.rel_rol.nombre in ['ADMINISTRADOR', 'ANALISTA'] %}
+            <a href="{{ url_for('registro') }}"
+                style="color: #555; text-decoration: none; font-weight: bold;">Registro</a>
+            {% endif %}
+            <a href="{{ url_for('estadisticas') }}"
+                style="color: #555; text-decoration: none; font-weight: bold;">Estadísticas</a>
+            {% if current_user.rel_rol.nombre == 'ADMINISTRADOR' %}
+            <a href="{{ url_for('gestion_usuarios') }}"
+                style="color: #555; text-decoration: none; font-weight: bold;">Usuarios</a>
+            <a href="{{ url_for('ver_auditoria') }}"
+                style="color: #555; text-decoration: none; font-weight: bold;">Auditoría</a>
+            {% endif %}
+            <a href="{{ url_for('logout') }}"
+                style="color: #dc3545; text-decoration: none; font-weight: bold; border-left: 2px solid #eee; padding-left: 15px;">Cerrar
+                Sesión</a>
+        </div>
+    </div>
+
+    <div class="full-width">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        {% if category in ['usuarios_success', 'usuarios_error'] %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endif %}
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+    </div>
+
+    <div class="bento-container">
+        <!-- FORMULARIO DE REGISTRO -->
+        <form method="POST" id="registroForm" class="bento-card card-tricolor">
+            <h3>Registrar Usuario</h3>
+
+            <div class="form-group">
+                <label>Nombres *</label>
+                <input type="text" name="nombre" required minlength="2" maxlength="50" pattern="[A-Za-záéíóúÁÉÍÓÚñÑ\s]+"
+                    title="Solo letras y espacios.">
+                <div class="error-message"></div>
+            </div>
+            <div class="form-group">
+                <label>Apellidos *</label>
+                <input type="text" name="apellido" required minlength="2" maxlength="50"
+                    pattern="[A-Za-záéíóúÁÉÍÓÚñÑ\s]+" title="Solo letras y espacios.">
+                <div class="error-message"></div>
+            </div>
+            <div class="form-group">
+                <label>Cédula *</label>
+                <input type="text" name="cedula" required maxlength="10" pattern="^[VEJvej]-\d{7,8}$"
+                    title="Formato: V-12345678">
+                <div class="error-message"></div>
+            </div>
+            <div class="form-group">
+                <label>Teléfono *</label>
+                <input type="text" name="telefono" required inputmode="numeric"
+                    oninput="this.value = this.value.replace(/[^0-9]/g, '');" maxlength="11"
+                    title="Solo números, máximo 11 dígitos">
+                <div class="error-message"></div>
+            </div>
+            <div class="form-group">
+                <label>Correo Electrónico *</label>
+                <input type="email" name="email" required title="Ingrese un correo válido (ejemplo@dominio.com)">
+                <div class="error-message"></div>
+            </div>
+            <div class="form-group">
+                <label>Usuario *</label>
+                <input type="text" name="username" required maxlength="20" style="text-transform: lowercase;"
+                    title="Mínimo 3 caracteres, solo letras y números" pattern="[a-zA-Z0-9]{3,20}">
+                <div class="error-message"></div>
+            </div>
+            <div class="form-group">
+                <label>Contraseña *</label>
+                <input type="password" name="password" required
+                    pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$"
+                    title="Mínimo 8 caracteres, 1 mayúscula, 1 número y 1 símbolo">
+                <div class="error-message"></div>
+            </div>
+            <div class="form-group">
+                <label>Rol *</label>
+                <select name="rol_id" required>
+                    <option value="">Seleccione...</option>
+                    {% for r in roles %}<option value="{{ r.id }}">{{ r.nombre }}</option>{% endfor %}
+                </select>
+                <div class="error-message"></div>
+            </div>
+            <button type="submit" class="btn-submit">Registrar Usuario</button>
+        </form>
+
+        <!-- LISTA DE USUARIOS -->
+        <div class="bento-card">
+            <h3>Lista de Usuarios</h3>
+            <input type="text" id="searchInput" placeholder="🔍 Buscar usuario..."
+                style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 6px;">
+            <div style="overflow-x: auto;">
+                <table id="usuariosTable">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Nombre Completo</th>
+                            <th>Rol</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in usuarios %}
+                        <tr>
+                            <td>{{ u.username }}</td>
+                            <td>{{ u.nombre }} {{ u.apellido }}</td>
+                            <td>{{ u.rel_rol.nombre }}</td>
+                            <td>
+                                {% if u.activo %}
+                                <span class="badge-activo">ACTIVO</span>
+                                {% else %}
+                                <span class="badge-inactivo">INACTIVO</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn-editar" onclick="editarUsuario({{ u.id }})">✏️ Editar</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE EDICIÓN (SOLO CIERRE CON X) -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 style="margin: 0;">✏️ Editar Usuario</h3>
+                <span class="close" onclick="cerrarModal()">&times;</span>
+            </div>
+            <form id="editForm" method="POST">
+                <input type="hidden" name="usuario_id" id="edit_usuario_id">
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Usuario *</label>
+                        <input type="text" name="username" id="edit_username" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Rol *</label>
+                        <select name="rol_id" id="edit_rol_id" required>
+                            <option value="">Seleccione...</option>
+                            {% for r in roles %}<option value="{{ r.id }}">{{ r.nombre }}</option>{% endfor %}
+                        </select>
+                        <div class="error-message"></div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Nombres *</label>
+                        <input type="text" name="nombre" id="edit_nombre" required pattern="[A-Za-záéíóúÁÉÍÓÚñÑ\s]+"
+                            title="Solo letras y espacios">
+                        <div class="error-message"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Apellidos *</label>
+                        <input type="text" name="apellido" id="edit_apellido" required pattern="[A-Za-záéíóúÁÉÍÓÚñÑ\s]+"
+                            title="Solo letras y espacios">
+                        <div class="error-message"></div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Cédula *</label>
+                        <input type="text" name="cedula" id="edit_cedula" required pattern="^[VEJvej]-\d{7,8}$"
+                            title="Formato: V-12345678">
+                        <div class="error-message"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Teléfono *</label>
+                        <input type="text" name="telefono" id="edit_telefono" required inputmode="numeric"
+                            oninput="this.value = this.value.replace(/[^0-9]/g, '');" maxlength="11"
+                            title="Solo números, máximo 11 dígitos">
+                        <div class="error-message"></div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Correo Electrónico *</label>
+                    <input type="email" name="email" id="edit_email" required title="Ingrese un correo válido">
+                    <div class="error-message"></div>
+                </div>
+
+                <div class="form-group">
+                    <label>Nueva Contraseña (opcional)</label>
+                    <input type="password" name="password" id="edit_password"
+                        placeholder="Dejar en blanco para no cambiar"
+                        pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$"
+                        title="Mínimo 8 caracteres, 1 mayúscula, 1 número y 1 símbolo">
+                    <div class="error-message"></div>
+                    <small style="color: #666;">Mínimo 8 caracteres, 1 mayúscula, 1 número y 1 símbolo</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Estado de la Cuenta *</label>
+                    <select name="activo" id="edit_activo" required>
+                        <option value="true">✅ ACTIVO</option>
+                        <option value="false">❌ INACTIVO</option>
+                    </select>
+                    <div class="error-message"></div>
+                </div>
+
+                <button type="submit" class="btn-submit">💾 Guardar Cambios</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // ==================== VALIDACIÓN EN TIEMPO REAL ====================
+        function validarCampo(campo) {
+            let errorDiv = campo.parentElement.querySelector('.error-message');
+            if (!errorDiv) return true;
+
+            if (!campo.validity.valid) {
+                campo.classList.add('input-error');
+                errorDiv.textContent = campo.title || campo.validationMessage;
+                errorDiv.style.display = 'block';
+                return false;
+            } else {
+                campo.classList.remove('input-error');
+                errorDiv.style.display = 'none';
+                return true;
+            }
+        }
+
+        function activarValidacionEnTiempoReal(formulario) {
+            const inputs = formulario.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                if (!input.readOnly) {
+                    input.removeEventListener('input', () => validarCampo(input));
+                    input.removeEventListener('blur', () => validarCampo(input));
+                    input.addEventListener('input', () => validarCampo(input));
+                    input.addEventListener('blur', () => validarCampo(input));
+                }
+            });
+        }
+
+        // Validar formulario antes de enviar
+        function validarFormulario(formulario) {
+            let esValido = true;
+            const inputs = formulario.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                if (!input.readOnly && !validarCampo(input)) {
+                    esValido = false;
+                }
+            });
+            return esValido;
+        }
+
+        // ==================== BUSCADOR EN TIEMPO REAL ====================
+        document.getElementById('searchInput').addEventListener('keyup', function () {
+            let filter = this.value.toLowerCase();
+            let rows = document.querySelectorAll('#usuariosTable tbody tr');
+
+            rows.forEach(row => {
+                let text = row.innerText.toLowerCase();
+                row.style.display = text.includes(filter) ? '' : 'none';
+            });
+        });
+
+        // ==================== MODAL - SOLO CIERRE CON X ====================
+        async function editarUsuario(id) {
+            try {
+                const response = await fetch(`/usuarios/obtener/${id}`);
+                const user = await response.json();
+
+                // Llenar el formulario del modal
+                document.getElementById('edit_usuario_id').value = user.id;
+                document.getElementById('edit_username').value = user.username;
+                document.getElementById('edit_nombre').value = user.nombre;
+                document.getElementById('edit_apellido').value = user.apellido;
+                document.getElementById('edit_cedula').value = user.cedula;
+                document.getElementById('edit_telefono').value = user.telefono;
+                document.getElementById('edit_email').value = user.email;
+                document.getElementById('edit_rol_id').value = user.rol_id;
+                document.getElementById('edit_activo').value = user.activo ? 'true' : 'false';
+                document.getElementById('edit_password').value = '';
+
+                // Limpiar mensajes de error previos
+                document.querySelectorAll('#editForm .error-message').forEach(el => {
+                    el.style.display = 'none';
+                });
+                document.querySelectorAll('#editForm .input-error').forEach(el => {
+                    el.classList.remove('input-error');
+                });
+
+                // Configurar la acción del formulario
+                document.getElementById('editForm').action = `/usuarios/editar/${id}`;
+
+                // Activar validaciones en tiempo real para el modal
+                activarValidacionEnTiempoReal(document.getElementById('editForm'));
+
+                // Mostrar el modal
+                document.getElementById('editModal').style.display = 'block';
+            } catch (error) {
+                console.error('Error al cargar usuario:', error);
+                alert('Error al cargar los datos del usuario');
+            }
+        }
+
+        function cerrarModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        // NO cerrar al hacer clic fuera del modal
+        // (eliminamos el event listener de window.onclick)
+
+        // ==================== VALIDACIÓN FORMULARIO DE REGISTRO ====================
+        document.getElementById('registroForm').addEventListener('submit', function (event) {
+            if (!validarFormulario(this)) {
+                event.preventDefault();
+                const primerError = this.querySelector('.input-error');
+                if (primerError) {
+                    primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    primerError.focus();
+                }
+            }
+        });
+
+        // ==================== VALIDACIÓN FORMULARIO DE EDICIÓN ====================
+        document.getElementById('editForm').addEventListener('submit', function (event) {
+            if (!validarFormulario(this)) {
+                event.preventDefault();
+                const primerError = this.querySelector('.input-error');
+                if (primerError) {
+                    primerError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    primerError.focus();
+                }
+            }
+        });
+
+        // Activar validaciones en tiempo real al cargar la página
+        document.addEventListener('DOMContentLoaded', function () {
+            activarValidacionEnTiempoReal(document.getElementById('registroForm'));
+        });
+
+        // Ocultar mensajes flash después de 5 segundos
+        setTimeout(() => {
+            document.querySelectorAll('.alert').forEach(el => el.style.display = 'none');
+        }, 5000);
+    </script>
+</body>
+
+</html>
